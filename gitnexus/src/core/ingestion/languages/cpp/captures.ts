@@ -743,7 +743,7 @@ function inferCppCallAdlArgs(callNode: SyntaxNode): CppAdlArgInfo[] {
   return out;
 }
 
-const EMPTY_ADL_ARG: CppAdlArgInfo = { simpleClassName: '', isPointer: false };
+const EMPTY_ADL_ARG: CppAdlArgInfo = { simpleClassName: '' };
 
 function classifyAdlArg(argNode: SyntaxNode): CppAdlArgInfo {
   // Literals and primitive-shaped expressions never have associated namespaces.
@@ -799,7 +799,6 @@ function lookupAdlIdentifierType(identNode: SyntaxNode): CppAdlArgInfo {
     // `init_declarator > identifier` is value.
     // Function-pointer wrappers (`pointer_declarator > function_declarator`)
     // must not contribute ADL associated namespaces.
-    let isPointer = false;
     let isFunctionPointer = false;
     let inner: SyntaxNode = declarator;
     let nameText: string | null = null;
@@ -810,7 +809,6 @@ function lookupAdlIdentifierType(identNode: SyntaxNode): CppAdlArgInfo {
           isFunctionPointer = true;
           break;
         }
-        isPointer = true;
         const next = inner.childForFieldName('declarator');
         if (next === null) break;
         inner = next;
@@ -847,7 +845,7 @@ function lookupAdlIdentifierType(identNode: SyntaxNode): CppAdlArgInfo {
     if (isFunctionPointer || nameText !== varName) continue;
 
     const simpleClassName = extractAdlSimpleTypeName(typeNode);
-    return { simpleClassName, isPointer };
+    return { simpleClassName };
   }
   return EMPTY_ADL_ARG;
 }

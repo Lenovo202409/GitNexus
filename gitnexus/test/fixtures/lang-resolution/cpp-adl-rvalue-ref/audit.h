@@ -2,5 +2,4 @@
 
 namespace audit {
   struct Event {};
-  void record(Event&& e);
 }

@@ -69,9 +69,6 @@ export interface CppAdlArgInfo {
   /** Simple class-like type name (last segment of qualified name); empty
    *  for primitives, literals, function pointers, template specs, etc. */
   readonly simpleClassName: string;
-  /** True when the variable's declarator contained one or more
-   *  `pointer_declarator` wrappers. */
-  readonly isPointer: boolean;
 }
 
 const argInfoBySite = new Map<string, readonly CppAdlArgInfo[]>();

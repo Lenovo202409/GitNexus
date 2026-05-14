@@ -2205,7 +2205,7 @@ describe('C++ ADL — rvalue reference args participate', () => {
     const calls = getRelationships(result, 'CALLS');
     const recordCalls = calls.filter((c) => c.source === 'runRvalueRef' && c.target === 'record');
     expect(recordCalls.length).toBe(1);
-    expect(recordCalls[0].targetFilePath).toContain('audit.h');
+    expect(recordCalls[0].targetFilePath).toContain('record-rvalue.h');
   });
 });
 
