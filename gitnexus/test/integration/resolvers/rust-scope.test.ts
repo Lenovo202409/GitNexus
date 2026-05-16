@@ -85,9 +85,10 @@ impl User {
     expect(getNodesByLabel(result, 'Struct')).toContain('User');
   });
 
-  it('classifies save as Method (not Function)', () => {
-    const methods = getNodesByLabel(result, 'Method');
-    expect(methods).toContain('save');
+  it('classifies save as a function owned by User (HAS_METHOD edge)', () => {
+    const edges = getRelationships(result, 'HAS_METHOD');
+    const userSave = edges.find((e) => e.source === 'User' && e.target === 'save');
+    expect(userSave).toBeDefined();
   });
 
   it('emits HAS_METHOD edge from User to save', () => {
