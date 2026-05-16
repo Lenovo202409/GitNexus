@@ -33,6 +33,19 @@ const CROSS_FILE_SKIP_THRESHOLD = 0.03;
 const MAX_CROSS_FILE_REPROCESS = 2000;
 
 /**
+ * Default wall-clock time limit (ms) for cross-file propagation.
+ * Override via `GITNEXUS_CROSS_FILE_TIMEOUT_MS` env var.
+ * Prevents the phase from stalling for hours on very large repositories
+ * where per-file re-resolution is expensive.
+ */
+const DEFAULT_CROSS_FILE_ELAPSED_MS = 120_000; // 2 minutes
+
+function getCrossFileTimeoutMs(): number {
+  const raw = Number(process.env.GITNEXUS_CROSS_FILE_TIMEOUT_MS);
+  return raw > 0 && Number.isFinite(raw) ? raw : DEFAULT_CROSS_FILE_ELAPSED_MS;
+}
+
+/**
  * Cross-file binding propagation.
  * Returns the number of files re-processed.
  */
@@ -113,9 +126,13 @@ export async function runCrossFileBindingPropagation(
 
   let crossFileResolved = 0;
   const crossFileStart = Date.now();
+  const crossFileDeadlineMs = getCrossFileTimeoutMs();
   const astCache = createASTCache(AST_CACHE_CAP);
+  let timedOut = false;
 
   for (const level of levels) {
+    if (timedOut) break;
+
     const levelCandidates: {
       filePath: string;
       seeded: Map<string, string>;
@@ -161,6 +178,15 @@ export async function runCrossFileBindingPropagation(
     const contentMap = await readFileContents(repoPath, levelPaths);
 
     for (const { filePath, seeded, importedReturns, importedRawReturns } of levelCandidates) {
+      if (Date.now() - crossFileStart >= crossFileDeadlineMs) {
+        timedOut = true;
+        logger.warn(
+          `⏱️ Cross-file type propagation timed out after ${crossFileDeadlineMs}ms` +
+            ` (${crossFileResolved} files processed). Override with GITNEXUS_CROSS_FILE_TIMEOUT_MS env var.`,
+        );
+        break;
+      }
+
       const content = contentMap.get(filePath);
       if (!content) continue;
 
