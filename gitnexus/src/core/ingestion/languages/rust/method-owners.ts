@@ -28,8 +28,8 @@ function populateRustImplOwners(parsed: ParsedFile): void {
   const structByName = new Map<string, string>();
   for (const scope of parsed.scopes) {
     for (const def of scope.ownedDefs) {
-      if (isClassLike(def.type) && (def.type === 'Struct' || def.type === 'Trait')) {
-        structByName.set(def.name, def.nodeId);
+      if (isClassLike(def.type) && def.qualifiedName) {
+        structByName.set(def.qualifiedName, def.nodeId);
       }
     }
   }
@@ -53,7 +53,16 @@ function populateRustImplOwners(parsed: ParsedFile): void {
     }
     if (receiverType === undefined) continue;
 
-    const ownerId = structByName.get(receiverType);
+    let ownerId = structByName.get(receiverType);
+    if (ownerId === undefined) {
+      // Try suffix match (qualifiedName might be `module.StructName`)
+      for (const [qname, nodeId] of structByName) {
+        if (qname.endsWith('.' + receiverType) || qname === receiverType) {
+          ownerId = nodeId;
+          break;
+        }
+      }
+    }
     if (ownerId !== undefined) {
       for (const def of methodDefs) {
         (def as { ownerId?: string }).ownerId = ownerId;

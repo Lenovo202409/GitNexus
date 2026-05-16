@@ -194,15 +194,16 @@ function makeImportCapture(
   name: string,
   alias: string | undefined,
 ): CaptureMatch {
-  const result: CaptureMatch = {
+  return {
     '@import.statement': syntheticCapture('@import.statement', anchor, anchor.text),
     '@import.kind': syntheticCapture('@import.kind', anchor, kind),
     '@import.source': syntheticCapture('@import.source', anchor, source),
     '@import.name': syntheticCapture('@import.name', anchor, alias ?? name),
+    ...(alias !== undefined
+      ? {
+          '@import.alias': syntheticCapture('@import.alias', anchor, alias),
+          '@import.original-name': syntheticCapture('@import.original-name', anchor, name),
+        }
+      : {}),
   };
-  if (alias !== undefined) {
-    result['@import.alias'] = syntheticCapture('@import.alias', anchor, alias);
-    result['@import.original-name'] = syntheticCapture('@import.original-name', anchor, name);
-  }
-  return result;
 }

@@ -18,11 +18,10 @@ export function interpretRustImport(captures: CaptureMatch): ParsedImport | null
     if (name === undefined) return null;
     const originalName = captures['@import.original-name']?.text;
     return {
-      kind: 'named',
+      kind: 'reexport',
       localName: alias ?? name,
       importedName: originalName ?? name,
       targetRaw: source,
-      isReexport: true,
     };
   }
   // kind === 'named'

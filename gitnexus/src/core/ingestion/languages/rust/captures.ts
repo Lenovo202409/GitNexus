@@ -65,6 +65,20 @@ export function emitRustScopeCaptures(
     if (declAnchor !== undefined) {
       const fnNode = findNodeAtRange(tree.rootNode, declAnchor.range, 'function_item');
       if (fnNode !== null) {
+        // Reclassify as method if inside an impl block
+        if (findEnclosingImpl(fnNode) !== null) {
+          const nameCap = grouped['@declaration.name'];
+          delete (grouped as Record<string, Capture | undefined>)['@declaration.function'];
+          grouped['@declaration.method'] = syntheticCapture(
+            '@declaration.method',
+            fnNode,
+            fnNode.text,
+          );
+          if (nameCap !== undefined) {
+            grouped['@declaration.name'] = nameCap;
+          }
+        }
+
         const arity = computeRustDeclarationArity(fnNode);
         if (arity.parameterCount !== undefined) {
           grouped['@declaration.parameter-count'] = syntheticCapture(
