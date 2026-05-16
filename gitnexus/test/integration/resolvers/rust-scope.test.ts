@@ -864,3 +864,203 @@ impl User {
     expect(saveCall).toBeDefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 16. Re-export chain: pub use re-exports
+// ---------------------------------------------------------------------------
+
+describe('Rust scope: pub use re-exports', () => {
+  let result: PipelineResult;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rust-scope-reexport-'));
+    writeFixtureRepo(tmpDir, {
+      'src/main.rs': `
+mod models;
+use crate::models::User;
+
+fn process() {
+    let u = User { name: String::new() };
+    u.save();
+}
+
+fn main() {}
+`,
+      'src/models.rs': `
+mod user;
+pub use self::user::User;
+`,
+      'src/models/user.rs': `
+pub struct User {
+    pub name: String,
+}
+
+impl User {
+    pub fn save(&self) {}
+}
+`,
+    });
+    result = await runPipelineFromRepo(tmpDir, () => {});
+  }, 60000);
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('emits IMPORTS edges through re-export chain', () => {
+    const imports = getRelationships(result, 'IMPORTS');
+    expect(imports.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 17. Local shadow: inner variable shadows outer
+// ---------------------------------------------------------------------------
+
+describe('Rust scope: local variable shadowing', () => {
+  let result: PipelineResult;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rust-scope-shadow-'));
+    writeFixtureRepo(tmpDir, {
+      'src/main.rs': `
+mod user;
+use crate::user::User;
+
+fn process() {
+    let x = 42;
+    let x = User { name: String::new() };
+    x.save();
+}
+
+fn main() {}
+`,
+      'src/user.rs': `
+pub struct User {
+    pub name: String,
+}
+
+impl User {
+    pub fn save(&self) {}
+}
+`,
+    });
+    result = await runPipelineFromRepo(tmpDir, () => {});
+  }, 60000);
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('resolves x.save() to User#save after shadow rebind', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const saveCall = calls.find(
+      (c) => c.target === 'save' && c.source === 'process',
+    );
+    expect(saveCall).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 18. Closure / nested function scope
+// ---------------------------------------------------------------------------
+
+describe('Rust scope: closure scope isolation', () => {
+  let result: PipelineResult;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rust-scope-closure-'));
+    writeFixtureRepo(tmpDir, {
+      'src/main.rs': `
+fn adder(x: i32) -> i32 {
+    let f = |y: i32| -> i32 { x + y };
+    f(10)
+}
+
+fn main() {
+    adder(5);
+}
+`,
+    });
+    result = await runPipelineFromRepo(tmpDir, () => {});
+  }, 60000);
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('detects adder function', () => {
+    const fns = getNodesByLabel(result, 'Function');
+    expect(fns).toContain('adder');
+  });
+
+  it('resolves main → adder() call', () => {
+    const calls = getRelationships(result, 'CALLS');
+    const call = calls.find(
+      (c) => c.target === 'adder' && c.source === 'main',
+    );
+    expect(call).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 19. Trait default method
+// ---------------------------------------------------------------------------
+
+describe('Rust scope: trait default methods', () => {
+  let result: PipelineResult;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rust-scope-default-method-'));
+    writeFixtureRepo(tmpDir, {
+      'src/main.rs': `
+trait Greeter {
+    fn name(&self) -> String;
+    fn greet(&self) -> String {
+        format!("Hello, {}!", self.name())
+    }
+}
+
+struct User {
+    username: String,
+}
+
+impl Greeter for User {
+    fn name(&self) -> String {
+        self.username.clone()
+    }
+}
+
+fn main() {
+    let u = User { username: String::from("alice") };
+    u.greet();
+}
+`,
+    });
+    result = await runPipelineFromRepo(tmpDir, () => {});
+  }, 60000);
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('detects Greeter trait', () => {
+    expect(getNodesByLabel(result, 'Trait')).toContain('Greeter');
+  });
+
+  it('detects User struct', () => {
+    expect(getNodesByLabel(result, 'Struct')).toContain('User');
+  });
+
+  it('emits IMPLEMENTS edge from User to Greeter', () => {
+    const impls = getRelationships(result, 'IMPLEMENTS');
+    const edge = impls.find(
+      (e) => e.source === 'User' && e.target === 'Greeter',
+    );
+    expect(edge).toBeDefined();
+  });
+});

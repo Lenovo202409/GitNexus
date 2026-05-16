@@ -42,7 +42,12 @@ export function resolveRustImportTarget(
   }
 
   // External crate — try workspace-level resolution
-  return resolveWorkspaceCrate(segments, allFilePaths);
+  const workspaceResult = resolveWorkspaceCrate(segments, allFilePaths);
+  if (workspaceResult !== null) return workspaceResult;
+
+  // Fallback: treat as implicit crate-relative (Rust 2015 edition or
+  // when the first segment matches a sibling module name).
+  return resolveModulePath(segments, findSrcRoot(fromNormalized), allFilePaths);
 }
 
 function findSrcRoot(filePath: string): string {
