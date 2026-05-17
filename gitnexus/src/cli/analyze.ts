@@ -85,8 +85,6 @@ const STACK_FLAG = `--stack-size=${STACK_KB}`;
 const childProcessLikelyOom = (err: unknown): boolean => {
   if (!err || typeof err !== 'object') return false;
   const e = err as { status?: unknown; signal?: unknown; stderr?: unknown; stdout?: unknown; message?: unknown };
-  const statusSignalLikelyOom = e.status === 134 || e.signal === 'SIGABRT';
-  if (statusSignalLikelyOom) return true;
 
   const hasHeapOomSignature = (v: unknown): boolean => {
     const text = (Buffer.isBuffer(v) ? v.toString('utf8') : typeof v === 'string' ? v : '').toLowerCase();
@@ -99,7 +97,15 @@ const childProcessLikelyOom = (err: unknown): boolean => {
     );
   };
 
-  return hasHeapOomSignature(e.message) || hasHeapOomSignature(e.stderr) || hasHeapOomSignature(e.stdout);
+  const fields = [e.message, e.stderr, e.stdout];
+  if (fields.some((v) => hasHeapOomSignature(v))) return true;
+
+  const hasAnyChildOutput = [e.stderr, e.stdout].some(
+    (v) => (Buffer.isBuffer(v) && v.length > 0) || (typeof v === 'string' && v.length > 0),
+  );
+  if (hasAnyChildOutput) return false;
+
+  return e.status === 134 || e.signal === 'SIGABRT';
 };
 
 /** Re-exec the process with a 16GB heap and larger stack if we're currently below that. */
@@ -125,8 +131,9 @@ function ensureHeap(): boolean {
       cliError(
         `  Analysis likely ran out of memory.\n` +
           `  Retry with a larger heap if your machine allows it:\n` +
-          `    NODE_OPTIONS="--max-old-space-size=24576" gitnexus analyze ...\n` +
-          `    (Windows: set NODE_OPTIONS=--max-old-space-size=24576 && gitnexus analyze ...)\n`,
+          `    NODE_OPTIONS="--max-old-space-size=24576" gitnexus analyze [your-args]\n` +
+          `    (Windows: set NODE_OPTIONS=--max-old-space-size=24576 && gitnexus analyze [your-args])\n` +
+          `  If this persists, it may be a native crash unrelated to heap size.\n`,
         { recoveryHint: 'heap-oom-respawn' },
       );
     }

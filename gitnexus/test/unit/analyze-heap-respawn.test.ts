@@ -39,12 +39,22 @@ describe('analyzeCommand heap respawn', () => {
     expect(opts.env.NODE_OPTIONS).toContain('--max-old-space-size=16384');
   });
 
+  it('does not re-exec when NODE_OPTIONS already defines max-old-space-size', async () => {
+    process.env.NODE_OPTIONS = '--max-old-space-size=32768';
+    getHeapStatisticsMock.mockReturnValue({ heap_size_limit: 512 * 1024 * 1024 });
+
+    const { analyzeCommand } = await import('../../src/cli/analyze.js');
+    await analyzeCommand('/__gitnexus_nonexistent__', {});
+
+    expect(execFileSyncMock).not.toHaveBeenCalled();
+  });
+
   it('prints heap guidance when respawned analyze exits with likely OOM', async () => {
     delete process.env.NODE_OPTIONS;
     getHeapStatisticsMock.mockReturnValue({ heap_size_limit: 512 * 1024 * 1024 });
     execFileSyncMock.mockImplementationOnce(() => {
       const err = new Error('child failed') as Error & { status?: number; signal?: string };
-      err.status = 134;
+      err.status = undefined;
       err.signal = 'SIGABRT';
       throw err;
     });
@@ -54,13 +64,13 @@ describe('analyzeCommand heap respawn', () => {
     const { analyzeCommand } = await import('../../src/cli/analyze.js');
     await analyzeCommand(undefined, {});
 
-    expect(process.exitCode).toBe(134);
+    expect(process.exitCode).toBe(1);
     const oomGuidance = cap.records().find((r) => r.msg.includes('Analysis likely ran out of memory.'));
     expect(oomGuidance).toBeDefined();
-    expect(oomGuidance!.msg).toContain('NODE_OPTIONS="--max-old-space-size=24576"');
-    expect(oomGuidance!.msg).toContain(
-      '(Windows: set NODE_OPTIONS=--max-old-space-size=24576 && gitnexus analyze ...)',
-    );
+    const msg = oomGuidance?.msg ?? '';
+    expect(msg).toContain('NODE_OPTIONS="--max-old-space-size=24576"');
+    expect(msg).toContain('[your-args]');
+    expect(msg).toContain('native crash unrelated to heap size');
     cap.restore();
   });
 
@@ -86,6 +96,31 @@ describe('analyzeCommand heap respawn', () => {
 
     expect(process.exitCode).toBe(1);
     expect(cap.records().some((r) => r.msg.includes('Analysis likely ran out of memory.'))).toBe(true);
+    cap.restore();
+  });
+
+  it('does not print heap guidance for non-OOM child failures with output', async () => {
+    delete process.env.NODE_OPTIONS;
+    getHeapStatisticsMock.mockReturnValue({ heap_size_limit: 512 * 1024 * 1024 });
+    execFileSyncMock.mockImplementationOnce(() => {
+      const err = new Error('Command failed') as Error & {
+        status?: number;
+        signal?: string;
+        stderr?: Buffer;
+      };
+      err.status = 2;
+      err.signal = undefined;
+      err.stderr = Buffer.from('parser failed: invalid token');
+      throw err;
+    });
+
+    const { _captureLogger } = await import('../../src/core/logger.js');
+    const cap = _captureLogger();
+    const { analyzeCommand } = await import('../../src/cli/analyze.js');
+    await analyzeCommand(undefined, {});
+
+    expect(process.exitCode).toBe(2);
+    expect(cap.records().some((r) => r.msg.includes('Analysis likely ran out of memory.'))).toBe(false);
     cap.restore();
   });
 });
