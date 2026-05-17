@@ -237,6 +237,63 @@ describe('callLLM — reasoning model params', () => {
   });
 });
 
+describe('callLLM — timeout handling', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not apply a default timeout when requestTimeoutMs is omitted', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'answer' } }], usage: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+
+    const { callLLM } = await import('../../src/core/wiki/llm-client.js');
+    await callLLM('test', {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      maxTokens: 500,
+      temperature: 0,
+    });
+
+    expect(timeoutSpy).not.toHaveBeenCalled();
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBeUndefined();
+  });
+
+  it('applies an explicit timeout when requestTimeoutMs is provided', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: 'answer' } }], usage: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    const timeoutSignal = new AbortController().signal;
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutSignal);
+
+    const { callLLM } = await import('../../src/core/wiki/llm-client.js');
+    await callLLM('test', {
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      maxTokens: 500,
+      temperature: 0,
+      requestTimeoutMs: 120_000,
+    });
+
+    expect(timeoutSpy).toHaveBeenCalledWith(120_000);
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(timeoutSignal);
+  });
+});
+
 describe('callLLM — Azure content_filter error', () => {
   afterEach(() => vi.unstubAllGlobals());
 
