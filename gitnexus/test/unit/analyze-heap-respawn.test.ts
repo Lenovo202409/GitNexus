@@ -55,7 +55,12 @@ describe('analyzeCommand heap respawn', () => {
     await analyzeCommand(undefined, {});
 
     expect(process.exitCode).toBe(134);
-    expect(cap.records().some((r) => r.msg.includes('Analysis likely ran out of memory.'))).toBe(true);
+    const oomGuidance = cap.records().find((r) => r.msg.includes('Analysis likely ran out of memory.'));
+    expect(oomGuidance).toBeDefined();
+    expect(oomGuidance!.msg).toContain('NODE_OPTIONS="--max-old-space-size=24576"');
+    expect(oomGuidance!.msg).toContain(
+      '(Windows: set NODE_OPTIONS=--max-old-space-size=24576 && gitnexus analyze ...)',
+    );
     cap.restore();
   });
 });

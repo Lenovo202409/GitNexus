@@ -73,6 +73,14 @@ const HEAP_FLAG = `--max-old-space-size=${HEAP_MB}`;
 const STACK_KB = 4096;
 const STACK_FLAG = `--stack-size=${STACK_KB}`;
 
+/**
+ * Heuristic for "child re-exec likely died from V8 OOM".
+ *
+ * `execFileSync(..., { stdio: 'inherit' })` does not give us structured
+ * OOM metadata, but on Linux/macOS Node commonly exits with status 134
+ * and/or SIGABRT after a fatal heap exhaustion. We use those signatures
+ * to decide when to print heap-increase guidance for the user.
+ */
 const childProcessLikelyOom = (err: unknown): boolean => {
   if (!err || typeof err !== 'object') return false;
   const e = err as { status?: unknown; signal?: unknown };
