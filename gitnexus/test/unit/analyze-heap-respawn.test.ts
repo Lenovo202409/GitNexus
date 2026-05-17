@@ -19,9 +19,10 @@ vi.mock('../../src/core/lbug/lbug-adapter.js', () => ({
 }));
 
 describe('analyzeCommand heap respawn', () => {
-  const initialNodeOptions = process.env.NODE_OPTIONS;
+  let initialNodeOptions: string | undefined;
 
   beforeEach(() => {
+    initialNodeOptions = process.env.NODE_OPTIONS;
     vi.resetModules();
     execFileSyncMock.mockReset();
     getHeapStatisticsMock.mockReset();
@@ -71,6 +72,8 @@ describe('analyzeCommand heap respawn', () => {
     const { analyzeCommand } = await import('../../src/cli/analyze.js');
     await analyzeCommand(undefined, {});
 
+    // Signal-only child failures do not carry a numeric status, so the CLI
+    // falls back to exit code 1.
     expect(process.exitCode).toBe(1);
     const oomGuidance = cap.records().find((r) => r.msg.includes('Analysis likely ran out of memory.'));
     expect(oomGuidance).toBeDefined();
