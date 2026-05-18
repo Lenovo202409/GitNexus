@@ -221,19 +221,11 @@ export async function runChunkedParseAndResolve(
   const MIN_FILES_FOR_WORKERS = options?.workerThresholdsForTest?.minFiles ?? 15;
   const MIN_BYTES_FOR_WORKERS = options?.workerThresholdsForTest?.minBytes ?? 512 * 1024;
   const totalBytes = parseableScanned.reduce((s, f) => s + f.size, 0);
-  const disableWorkersForNativeLanguages =
-    process.env.GITNEXUS_ALLOW_CPP_WORKERS !== '1' && hasWorkerUnsafeLanguages(parseableScanned);
-  if (disableWorkersForNativeLanguages) {
-    logger.warn(
-      'C/C++ files detected — using sequential parser path to avoid known worker-thread native binding errors (e.g. `Napi::Error`). If you use a custom tree-sitter build that resolves this issue, set GITNEXUS_ALLOW_CPP_WORKERS=1 to force workers.',
-    );
-  }
 
   // Create worker pool once, reuse across chunks
   let workerPool: WorkerPool | undefined;
   if (
     !options?.skipWorkers &&
-    !disableWorkersForNativeLanguages &&
     (totalParseable >= MIN_FILES_FOR_WORKERS || totalBytes >= MIN_BYTES_FOR_WORKERS)
   ) {
     try {
@@ -324,6 +316,8 @@ export async function runChunkedParseAndResolve(
   const parseCache = options?.parseCache;
   let chunkCacheHits = 0;
   let chunkCacheMisses = 0;
+  // Suppress duplicate warnings when multiple consecutive chunks contain C/C++ files.
+  let hasWarnedAboutCppChunks = false;
 
   try {
     for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
@@ -379,6 +373,25 @@ export async function runChunkedParseAndResolve(
         // them under the chunk hash for the next run.
         chunkCacheMisses++;
         const rawResults: ParseWorkerResult[] = [];
+        // C/C++ grammar native bindings can crash worker threads with an
+        // unrecoverable Napi::Error / std::terminate(). Detect C/C++ files
+        // within this specific chunk and route them through the main-thread
+        // sequential path to avoid the crash. Other chunks (no C/C++) keep
+        // using the worker pool. GITNEXUS_ALLOW_CPP_WORKERS=1 opts out of
+        // this guard when a stable custom build is in use.
+        const chunkHasCppFiles =
+          workerPool &&
+          process.env.GITNEXUS_ALLOW_CPP_WORKERS !== '1' &&
+          hasWorkerUnsafeLanguages(chunkFiles);
+        if (chunkHasCppFiles && !hasWarnedAboutCppChunks) {
+          hasWarnedAboutCppChunks = true;
+          logger.warn(
+            'C/C++ files detected — parsing those chunks in sequential mode to avoid known ' +
+              'worker-thread native binding errors (e.g. `Napi::Error`). C/C++ source files ' +
+              'are still fully indexed; chunks with no C/C++ continue using workers. ' +
+              'Set GITNEXUS_ALLOW_CPP_WORKERS=1 if you use a custom tree-sitter build without this issue.',
+          );
+        }
         chunkWorkerData = await processParsing(
           graph,
           chunkFiles,
@@ -400,7 +413,11 @@ export async function runChunkedParseAndResolve(
               },
             });
           },
-          workerPool,
+          // For chunks containing C/C++ files, bypass the worker pool to avoid
+          // unrecoverable Napi::Error crashes from native grammar bindings in
+          // worker threads. processParsing falls through to processParsingSequential
+          // (main-thread safe). All other chunks keep using the worker pool.
+          chunkHasCppFiles ? undefined : workerPool,
           // Capture raw results only when we have a cache to write to —
           // otherwise we'd retain extra arrays for nothing.
           parseCache && chunkHash ? rawResults : undefined,
