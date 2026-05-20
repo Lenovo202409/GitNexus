@@ -109,7 +109,7 @@ That's it. This indexes the codebase, installs agent skills, registers Claude Co
 
 To configure MCP for your editor, run `npx gitnexus setup` once — or set it up manually below.
 
-> **Faster install (no C++ toolchain needed):** set `GITNEXUS_SKIP_OPTIONAL_GRAMMARS=1` before `npm install -g gitnexus` to skip the native `tree-sitter-dart` and `tree-sitter-proto` builds. Dart/Proto files won't be parsed, but install completes in seconds without `python3`/`make`/`g++`. Strict `=1` only — any other value falls through to the rebuild.
+> **Faster install (no C++ toolchain needed):** set `GITNEXUS_SKIP_OPTIONAL_GRAMMARS=1` before `npm install -g gitnexus` to skip vendored grammar materialize/build (`tree-sitter-dart`, `tree-sitter-proto`, `tree-sitter-swift`). Dart/Proto/Swift files won't be parsed, but install completes in seconds without `python3`/`make`/`g++`. Strict `=1` only — any other value falls through to the rebuild.
 
 ### MCP Setup
 

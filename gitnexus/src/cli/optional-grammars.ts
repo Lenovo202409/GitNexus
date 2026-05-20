@@ -1,8 +1,9 @@
 /**
  * Optional grammar availability check.
  *
- * tree-sitter-dart and tree-sitter-proto are optionalDependencies that
- * require a `node-gyp rebuild` at install time. The build can be skipped
+ * tree-sitter-dart and tree-sitter-proto are vendored under vendor/ and
+ * materialized into node_modules/ at postinstall, then built with node-gyp.
+ * The build can be skipped
  * via GITNEXUS_SKIP_OPTIONAL_GRAMMARS=1 (postinstall scripts), or it can
  * silently soft-fail when the C++ toolchain is missing.
  *
@@ -40,8 +41,8 @@ export interface MissingGrammar {
  * Returns the list of optional grammars whose native binding cannot be
  * loaded. Actually `require()`s the package — `require.resolve` would
  * locate the entry path even when the `.node` binding is absent (the
- * `file:` package directory is installed regardless of postinstall
- * outcome), giving false negatives for the exact users we want to warn:
+ * package directory exists without a working `.node` binding), giving false
+ * negatives for the exact users we want to warn:
  * those who installed with `GITNEXUS_SKIP_OPTIONAL_GRAMMARS=1` or whose
  * native rebuild soft-failed for missing toolchain.
  *
